@@ -40,6 +40,9 @@ trait MetadataMigration extends CustomTaskChange {
 
   private var resourceAccessor: ResourceAccessor = null
 
+  /** We want to exclude collectors from metadata entirely.
+    * This method finds their Ids so they can be passed to the migration code that can decide how to act upon them.
+    */
   private def findCollectorIds(connection: JdbcConnection) = {
     val collectorsIdQuery =
       """

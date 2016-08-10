@@ -27,11 +27,13 @@ class ExecutionTableMigration extends MetadataMigration {
         attempt
       )
 
+      val returnCode = row.getString("RC") // Allows for it to be null
+
       metadataStatement.addKeyValue("start", row.getTimestamp("START_DT"))
       metadataStatement.addKeyValue("backend", row.getString("BACKEND_TYPE"))
       metadataStatement.addKeyValue("end", row.getTimestamp("END_DT"))
       metadataStatement.addKeyValue("executionStatus", row.getString("STATUS"))
-      metadataStatement.addKeyValue("returnCode", row.getString("RC"))
+      metadataStatement.addKeyValue("returnCode", if (returnCode != null) returnCode.toInt else null)
       metadataStatement.addKeyValue("cache:allowResultReuse", row.getBoolean("ALLOWS_RESULT_REUSE"))
 
       // Fields that we want regardless of whether or not information exists (if not it's an empty object)

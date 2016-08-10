@@ -16,7 +16,8 @@
         <customChange class="cromwell.database.migration.metadata.table.ExecutionEventTableMigration" />
         <customChange class="cromwell.database.migration.metadata.table.FailureEventTableMigration" />
         <customChange class="cromwell.database.migration.metadata.table.RuntimeAttributesTableMigration" />
-        <customChange class="cromwell.database.migration.metadata.table.SymbolTableMigration" />
+        <customChange class="cromwell.database.migration.metadata.table.InputSymbolTableMigration" />
+        <customChange class="cromwell.database.migration.metadata.table.OutputSymbolTableMigration" />
     </changeSet>
 
 </databaseChangeLog>
