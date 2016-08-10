@@ -10,14 +10,14 @@ import org.slf4j.LoggerFactory
 import wdl4s.values.{WdlBoolean, WdlFloat, WdlInteger, WdlValue}
 
 object MetadataStatement {
-  val workflowIdIdx = 1
-  val keyIdx = 2
-  val callFqnIdx = 3
-  val callIndexIdx = 4
-  val callAttemptIdx = 5
-  val valueIdx = 6
-  val timestampIdx = 7
-  val valueTypeIdx = 8
+  val WorkflowIdIdx = 1
+  val KeyIdx = 2
+  val CallFqnIdx = 3
+  val CallIndexIdx = 4
+  val CallAttemptIdx = 5
+  val ValueIdx = 6
+  val TimestampIdx = 7
+  val ValueTypeIdx = 8
 
   def makeStatement(connection: JdbcConnection) = connection.prepareStatement(
     """
@@ -61,23 +61,23 @@ class MetadataStatementForWorkflow(preparedStatement: PreparedStatement, workflo
   }
 
   protected def setStatement() = {
-    preparedStatement.setString(MetadataStatement.workflowIdIdx, workflowId)
-    preparedStatement.setNull(MetadataStatement.callFqnIdx, Types.VARCHAR)
-    preparedStatement.setNull(MetadataStatement.callIndexIdx, Types.INTEGER)
-    preparedStatement.setNull(MetadataStatement.callAttemptIdx, Types.INTEGER)
+    preparedStatement.setString(MetadataStatement.WorkflowIdIdx, workflowId)
+    preparedStatement.setNull(MetadataStatement.CallFqnIdx, Types.VARCHAR)
+    preparedStatement.setNull(MetadataStatement.CallIndexIdx, Types.INTEGER)
+    preparedStatement.setNull(MetadataStatement.CallAttemptIdx, Types.INTEGER)
   }
 
   protected def addDataAndBatch(key: String, value: Any) = {
-    preparedStatement.setString(MetadataStatement.keyIdx, key)
+    preparedStatement.setString(MetadataStatement.KeyIdx, key)
 
     // Set the value and type
     value match {
       case null =>
-        preparedStatement.setNull(MetadataStatement.valueIdx, Types.VARCHAR)
-        preparedStatement.setNull(MetadataStatement.valueTypeIdx, Types.VARCHAR) // Null values have null type
-      case v =>
-        preparedStatement.setString(MetadataStatement.valueIdx, metadataValue(value))
-        preparedStatement.setString(MetadataStatement.valueTypeIdx, metadataType(value))
+        preparedStatement.setNull(MetadataStatement.ValueIdx, Types.VARCHAR)
+        preparedStatement.setNull(MetadataStatement.ValueTypeIdx, Types.VARCHAR) // Null values have null type
+      case _ =>
+        preparedStatement.setString(MetadataStatement.ValueIdx, metadataValue(value))
+        preparedStatement.setString(MetadataStatement.ValueTypeIdx, metadataType(value))
     }
 
     preparedStatement.addBatch()
@@ -93,22 +93,22 @@ class MetadataStatementForWorkflow(preparedStatement: PreparedStatement, workflo
   /** Adds a non-null value to the metadata journal. */
   override def addKeyValue(key: String, value: Any) = {
     if (value != null) {
-      preparedStatement.setTimestamp(MetadataStatement.timestampIdx, OffsetDateTime.now().toSystemTimestamp)
+      preparedStatement.setTimestamp(MetadataStatement.TimestampIdx, OffsetDateTime.now().toSystemTimestamp)
       add(key, value, s"Failed to migrate metadata value $value with key $key for workflow $workflowId")
     }
   }
 
   override def addEmptyValue(key: String): Unit = {
-    preparedStatement.setTimestamp(MetadataStatement.timestampIdx, dawn)
+    preparedStatement.setTimestamp(MetadataStatement.TimestampIdx, dawn)
     add(key, null, s"Failed to add empty value with key $key for workflow $workflowId")
   }
 }
 
 class MetadataStatementForCall(preparedStatement: PreparedStatement, workflowId: String, callFqn: String, index: Int, attempt: Int) extends MetadataStatementForWorkflow(preparedStatement, workflowId) {
   override def setStatement() = {
-    preparedStatement.setString(MetadataStatement.workflowIdIdx, workflowId)
-    preparedStatement.setString(MetadataStatement.callFqnIdx, callFqn)
-    preparedStatement.setInt(MetadataStatement.callIndexIdx, index)
-    preparedStatement.setInt(MetadataStatement.callAttemptIdx, attempt)
+    preparedStatement.setString(MetadataStatement.WorkflowIdIdx, workflowId)
+    preparedStatement.setString(MetadataStatement.CallFqnIdx, callFqn)
+    preparedStatement.setInt(MetadataStatement.CallIndexIdx, index)
+    preparedStatement.setInt(MetadataStatement.CallAttemptIdx, attempt)
   }
 }

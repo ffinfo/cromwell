@@ -10,7 +10,7 @@ import wdl4s.values._
 
 import scala.util.{Failure, Success, Try}
 
-class InputSymbolTableMigration extends MetadataMigration {
+class InputSymbolTableMigration extends SymbolTableMigration {
   override protected def selectQuery: String = """
    SELECT SYMBOL.SCOPE, SYMBOL.NAME, ex.IDX, ex.ATTEMPT, IO, WDL_TYPE,
    |  WDL_VALUE, WORKFLOW_EXECUTION_UUID, REPORTABLE_RESULT, ex.EXECUTION_ID, SYMBOL.WORKFLOW_EXECUTION_ID
@@ -24,28 +24,7 @@ class InputSymbolTableMigration extends MetadataMigration {
    |  AND SYMBOL.SCOPE = ex.CALL_FQN
    |WHERE IO = 'INPUT';""".stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],
-                                    statement: PreparedStatement, row: ResultSet, idx: Int): Unit = if (!collectors.contains(row.getInt("EXECUTION_ID"))) {
-    // Try to coerce the value to a WdlValue
-    val value = for {
-      wdlTypeValue <- Try(row.getString("WDL_TYPE"))
-      wdlType <- Try(WdlType.fromWdlString(wdlTypeValue))
-      wdlValueValue <- Try(row.getString("WDL_VALUE"))
-
-      wdlValue <- wdlType match {
-        case p: WdlPrimitiveType => p.coerceRawValue(wdlValueValue)
-        case o => Try(wdlType.fromWdlString(wdlValueValue))
-      }
-    } yield wdlValue
-
-    value match {
-      case Success(wdlValue) => processSymbol(statement, row, idx, collectors, wdlValue)
-      case Failure(f) =>
-        throw new CustomChangeException(s"Could not parse wdl value ${row.getString("WDL_VALUE")} of type ${row.getString("WDL_TYPE")}", f)
-    }
-  }
-
-  def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, collectors: Set[Int], wdlValue: WdlValue) = {
+  override def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue) = {
     val name = row.getString("NAME")
     val scope = row.getString("SCOPE")
     val index = row.getString("IDX")
@@ -68,26 +47,5 @@ class InputSymbolTableMigration extends MetadataMigration {
     }
   }
 
-  /**
-    * Add all necessary statements to the batch for the provided WdlValue.
-    */
-  private def addWdlValue(metadataKey: String, wdlValue: WdlValue, metadataStatementForCall: MetadataStatement): Unit = wdlValue match {
-    case WdlArray(_, valueSeq) =>
-      if (valueSeq.isEmpty) {
-        metadataStatementForCall.addKeyValue(s"$metadataKey[]", null)
-      } else {
-        val zippedSeq = valueSeq.zipWithIndex
-        zippedSeq.toList foreach { case (value, index) => addWdlValue(s"$metadataKey[$index]", value, metadataStatementForCall) }
-      }
-    case WdlMap(_, valueMap) =>
-      if (valueMap.isEmpty) {
-        metadataStatementForCall.addKeyValue(metadataKey, null)
-      } else {
-        valueMap.toList foreach { case (key, value) => addWdlValue(s"$metadataKey:${key.valueString}", value, metadataStatementForCall) }
-      }
-    case value =>
-      metadataStatementForCall.addKeyValue(metadataKey, value)
-  }
-
-  override def getConfirmationMessage: String = "Symbol Table migration complete."
+  override def getConfirmationMessage: String = "Inputs from Symbol Table migration complete."
 }

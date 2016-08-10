@@ -8,7 +8,7 @@
 
     <changeSet author="tjeandet" id="METADATA_MIGRATION">
         <comment>
-            Metadata migration from 0.19 to 0.20.
+            Metadata migration from 0.19 to 0.21.
         </comment>
         <customChange class="cromwell.database.migration.metadata.table.WorkflowExecutionTableMigration" />
         <customChange class="cromwell.database.migration.metadata.table.ExecutionTableMigration" />
@@ -17,7 +17,8 @@
         <customChange class="cromwell.database.migration.metadata.table.FailureEventTableMigration" />
         <customChange class="cromwell.database.migration.metadata.table.RuntimeAttributesTableMigration" />
         <customChange class="cromwell.database.migration.metadata.table.InputSymbolTableMigration" />
-        <customChange class="cromwell.database.migration.metadata.table.OutputSymbolTableMigration" />
+        <customChange class="cromwell.database.migration.metadata.table.CallOutputSymbolTableMigration" />
+        <customChange class="cromwell.database.migration.metadata.table.WorkflowOutputSymbolTableMigration" />
     </changeSet>
 
 </databaseChangeLog>

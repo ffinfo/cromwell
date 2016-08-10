@@ -12,12 +12,16 @@ import org.slf4j.LoggerFactory
 
 import scala.language.postfixOps
 
+object MetadataMigration {
+  var collectors: Set[Int] = _
+}
+
 trait MetadataMigration extends CustomTaskChange {
   val logger = LoggerFactory.getLogger("LiquibaseMetadataMigration")
 
   protected def selectQuery: String
-  protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],
-                           statement: PreparedStatement, row: ResultSet, idx: Int): Unit
+  protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit
+  protected def filterCollectors: Boolean = true
 
   private def migrate(connection: JdbcConnection, collectors: Set[Int]) = {
     val executionDataResultSet = connection.createStatement().executeQuery(selectQuery)
@@ -25,9 +29,18 @@ trait MetadataMigration extends CustomTaskChange {
 
     val executionIterator = new ResultSetIterator(executionDataResultSet)
 
-    executionIterator.zipWithIndex foreach {
+    // Filter collectors out if needed
+    val filtered = if (filterCollectors) {
+      executionIterator filter { row =>
+        // Assumes that, if it does, every selectQuery returns the Execution Id with this column name
+        val executionId = row.getString("EXECUTION_ID")
+        executionId == null || !collectors.contains(executionId.toInt)
+      }
+    } else executionIterator
+
+    filtered.zipWithIndex foreach {
       case (row, idx) =>
-        migrateRow(connection, collectors, metadataInsertStatement, row, idx)
+        migrateRow(connection, metadataInsertStatement, row, idx)
         if (idx % 100 == 0) {
           metadataInsertStatement.executeBatch()
           connection.commit()
@@ -38,7 +51,15 @@ trait MetadataMigration extends CustomTaskChange {
     connection.commit()
   }
 
-  private var resourceAccessor: ResourceAccessor = null
+  private var resourceAccessor: ResourceAccessor = _
+
+  private def getCollectors(connection: JdbcConnection) = {
+    if (MetadataMigration.collectors != null) MetadataMigration.collectors
+    else {
+      MetadataMigration.collectors = findCollectorIds(connection)
+      MetadataMigration.collectors
+    }
+  }
 
   /** We want to exclude collectors from metadata entirely.
     * This method finds their Ids so they can be passed to the migration code that can decide how to act upon them.
@@ -67,18 +88,16 @@ trait MetadataMigration extends CustomTaskChange {
     val dbConn = database.getConnection.asInstanceOf[JdbcConnection]
     try {
       dbConn.setAutoCommit(false)
-      migrate(dbConn, findCollectorIds(dbConn))
+      migrate(dbConn, getCollectors(dbConn))
     } catch {
       case t: CustomChangeException => throw t
       case t: Throwable => throw new CustomChangeException("Could not apply migration script for metadata", t)
     }
   }
 
-  override def setUp(): Unit = { }
+  override def setUp(): Unit = ()
 
-  override def validate(database: Database): ValidationErrors = {
-    new ValidationErrors
-  }
+  override def validate(database: Database): ValidationErrors = new ValidationErrors
 
   override def setFileOpener(resourceAccessor: ResourceAccessor): Unit = {
     this.resourceAccessor = resourceAccessor

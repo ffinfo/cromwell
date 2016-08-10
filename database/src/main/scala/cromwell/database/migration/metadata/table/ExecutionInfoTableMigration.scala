@@ -17,19 +17,16 @@ class ExecutionInfoTableMigration extends MetadataMigration {
       |WHERE CALL_FQN NOT LIKE '%$%';
     """.stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],
-                                    statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
-    if (!collectors.contains(row.getInt("EXECUTION_ID"))) {
-      val metadataStatement = new MetadataStatementForCall(statement,
-        row.getString("WORKFLOW_EXECUTION_UUID"),
-        row.getString("CALL_FQN"),
-        row.getInt("IDX"),
-        row.getInt("ATTEMPT")
-      )
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
+    val metadataStatement = new MetadataStatementForCall(statement,
+      row.getString("WORKFLOW_EXECUTION_UUID"),
+      row.getString("CALL_FQN"),
+      row.getInt("IDX"),
+      row.getInt("ATTEMPT")
+    )
 
-      infoKeyToMetadataKey(row.getString("INFO_KEY")) foreach { key =>
-        metadataStatement.addKeyValue(key, row.getString("INFO_VALUE"))
-      }
+    infoKeyToMetadataKey(row.getString("INFO_KEY")) foreach { key =>
+      metadataStatement.addKeyValue(key, row.getString("INFO_VALUE"))
     }
   }
 

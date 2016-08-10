@@ -15,9 +15,7 @@ class ExecutionEventTableMigration extends MetadataMigration {
       |  LEFT JOIN WORKFLOW_EXECUTION ON WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID = EXECUTION.WORKFLOW_EXECUTION_ID;
     """.stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],
-                                    statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
-    if (!collectors.contains(row.getInt("EXECUTION_ID"))) {
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
       val metadataStatement = new MetadataStatementForCall(statement,
         row.getString("WORKFLOW_EXECUTION_UUID"),
         row.getString("CALL_FQN"),
@@ -28,7 +26,6 @@ class ExecutionEventTableMigration extends MetadataMigration {
       metadataStatement.addKeyValue(s"executionEvents[$idx]:description", row.getString("DESCRIPTION"))
       metadataStatement.addKeyValue(s"executionEvents[$idx]:startTime", row.getTimestamp("START_DT"))
       metadataStatement.addKeyValue(s"executionEvents[$idx]:endTime", row.getTimestamp("END_DT"))
-    }
   }
 
   override def getConfirmationMessage: String = "ExecutionEvent Table migration complete."
