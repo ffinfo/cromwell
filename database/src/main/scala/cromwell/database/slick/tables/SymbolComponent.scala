@@ -20,7 +20,7 @@ trait SymbolComponent {
 
     def name = column[String]("NAME")
 
-    def index = column[Int]("INDEX")
+    def index = column[Int]("IDX")
 
     def io = column[String]("IO")
 

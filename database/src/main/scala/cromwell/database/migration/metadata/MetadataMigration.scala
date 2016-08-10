@@ -11,6 +11,7 @@ import liquibase.resource.ResourceAccessor
 import org.slf4j.LoggerFactory
 
 import scala.language.postfixOps
+import scala.util.{Success, Try}
 
 object MetadataMigration {
   var collectors: Set[Int] = _
@@ -33,8 +34,10 @@ trait MetadataMigration extends CustomTaskChange {
     val filtered = if (filterCollectors) {
       executionIterator filter { row =>
         // Assumes that, if it does, every selectQuery returns the Execution Id with this column name
-        val executionId = row.getString("EXECUTION_ID")
-        executionId == null || !collectors.contains(executionId.toInt)
+        Try(row.getString("EXECUTION_ID")) match {
+          case Success(executionId) => executionId == null || !collectors.contains(executionId.toInt)
+          case _ => true
+        }
       }
     } else executionIterator
 
@@ -85,13 +88,13 @@ trait MetadataMigration extends CustomTaskChange {
   }
 
   override def execute(database: Database): Unit = {
-    val dbConn = database.getConnection.asInstanceOf[JdbcConnection]
     try {
+      val dbConn = database.getConnection.asInstanceOf[JdbcConnection]
       dbConn.setAutoCommit(false)
       migrate(dbConn, getCollectors(dbConn))
     } catch {
       case t: CustomChangeException => throw t
-      case t: Throwable => throw new CustomChangeException("Could not apply migration script for metadata", t)
+      case t: Throwable => throw new CustomChangeException(s"Could not apply migration script for metadata at ${getClass.getSimpleName}", t)
     }
   }
 

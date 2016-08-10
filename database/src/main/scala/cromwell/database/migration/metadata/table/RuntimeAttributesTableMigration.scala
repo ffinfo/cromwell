@@ -2,7 +2,7 @@ package cromwell.database.migration.metadata.table
 
 import java.sql.{PreparedStatement, ResultSet}
 
-import cromwell.database.migration.metadata.{MetadataStatementForCall, MetadataMigration}
+import cromwell.database.migration.metadata.{MetadataMigration, MetadataStatementForCall}
 import liquibase.database.jvm.JdbcConnection
 
 class RuntimeAttributesTableMigration extends MetadataMigration {
@@ -14,22 +14,19 @@ class RuntimeAttributesTableMigration extends MetadataMigration {
       |     LEFT JOIN WORKFLOW_EXECUTION ON EXECUTION.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID;
     """.stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],
-                                    statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
-    if (!collectors.contains(row.getInt("EXECUTION_ID"))) {
-      val statementForCall = new MetadataStatementForCall(
-        statement,
-        row.getString("WORKFLOW_EXECUTION_UUID"),
-        row.getString("CALL_FQN"),
-        row.getInt("IDX"),
-        row.getInt("ATTEMPT")
-      )
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
+    val statementForCall = new MetadataStatementForCall(
+      statement,
+      row.getString("WORKFLOW_EXECUTION_UUID"),
+      row.getString("CALL_FQN"),
+      row.getInt("IDX"),
+      row.getInt("ATTEMPT")
+    )
 
-      val attributeName = row.getString("ATTRIBUTE_NAME")
-      val attributeValue = row.getString("ATTRIBUTE_VALUE")
+    val attributeName = row.getString("ATTRIBUTE_NAME")
+    val attributeValue = row.getString("ATTRIBUTE_VALUE")
 
-      statementForCall.addKeyValue(s"runtimeAttributes:$attributeName", attributeValue)
-    }
+    statementForCall.addKeyValue(s"runtimeAttributes:$attributeName", attributeValue)
   }
 
   override def getConfirmationMessage: String = "RuntimeAttributes Table migration complete."

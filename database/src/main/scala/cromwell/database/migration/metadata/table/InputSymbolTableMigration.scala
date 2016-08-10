@@ -2,20 +2,15 @@ package cromwell.database.migration.metadata.table
 
 import java.sql.{PreparedStatement, ResultSet}
 
-import cromwell.database.migration.metadata.{MetadataMigration, MetadataStatement, MetadataStatementForCall, MetadataStatementForWorkflow}
-import liquibase.database.jvm.JdbcConnection
-import liquibase.exception.CustomChangeException
-import wdl4s.types.{WdlPrimitiveType, WdlType}
+import cromwell.database.migration.metadata.{MetadataStatementForCall, MetadataStatementForWorkflow}
 import wdl4s.values._
-
-import scala.util.{Failure, Success, Try}
 
 class InputSymbolTableMigration extends SymbolTableMigration {
   override protected def selectQuery: String = """
    SELECT SYMBOL.SCOPE, SYMBOL.NAME, ex.IDX, ex.ATTEMPT, IO, WDL_TYPE,
    |  WDL_VALUE, WORKFLOW_EXECUTION_UUID, REPORTABLE_RESULT, ex.EXECUTION_ID, SYMBOL.WORKFLOW_EXECUTION_ID
    |FROM SYMBOL
-   |  LEFT JOIN WORKFLOW_EXECUTION ON SYMBOL.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID # Joins the workflow UUID
+   |  LEFT JOIN WORKFLOW_EXECUTION ON SYMBOL.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
    |  LEFT JOIN(
    |    SELECT CALL_FQN, IDX, ATTEMPT, WORKFLOW_EXECUTION_ID, EXECUTION_ID
    |    FROM EXECUTION

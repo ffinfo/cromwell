@@ -10,8 +10,7 @@ class WorkflowExecutionTableMigration extends MetadataMigration {
         SELECT WORKFLOW_EXECUTION_UUID, STATUS, START_DT, END_DT, WORKFLOW_NAME
           FROM WORKFLOW_EXECUTION;""".stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],
-                                    statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
     val startDt = row.getTimestamp("START_DT")
 
     val metadataStatement = new MetadataStatementForWorkflow(statement, row.getString("WORKFLOW_EXECUTION_UUID"))

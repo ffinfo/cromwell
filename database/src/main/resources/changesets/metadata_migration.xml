@@ -3,9 +3,14 @@
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.3.xsd">
 
-    <property name="clob.type" value="LONGTEXT" dbms="mysql"/>
-    <property name="clob.type" value="LONGVARCHAR" dbms="hsqldb"/>
-
+    <!-- Temporary until column renaming -->
+    <!-- INDEX is a reserved keyword and HSQL doesn't support backtick escaping in queries so going with this for now.. -->
+    <changeSet author="tjeandet" id="rename-index-to-idx">
+        <renameColumn columnDataType="INT"
+                      newColumnName="IDX"
+                      oldColumnName="INDEX"
+                      tableName="SYMBOL"/>
+    </changeSet>
     <changeSet author="tjeandet" id="METADATA_MIGRATION">
         <comment>
             Metadata migration from 0.19 to 0.21.
