@@ -43,10 +43,17 @@ trait MetadataMigration extends CustomTaskChange {
   private def findCollectorIds(connection: JdbcConnection) = {
     val collectorsIdQuery =
       """
-        |SELECT EXECUTION_ID
+        SELECT EXECUTION_ID
         |FROM EXECUTION
-        |GROUP BY CALL_FQN, ATTEMPT, WORKFLOW_EXECUTION_ID
-        |HAVING COUNT(*) > 1
+        |   JOIN(SELECT CALL_FQN, ATTEMPT, WORKFLOW_EXECUTION_ID
+        |      FROM EXECUTION
+        |    GROUP BY CALL_FQN, ATTEMPT, WORKFLOW_EXECUTION_ID
+        |    HAVING COUNT(*) > 1
+        |    ) collectors
+        |ON collectors.CALL_FQN = EXECUTION.CALL_FQN
+        |   AND collectors.ATTEMPT = EXECUTION.ATTEMPT
+        |   AND collectors.WORKFLOW_EXECUTION_ID = EXECUTION.WORKFLOW_EXECUTION_ID
+        |WHERE EXECUTION.IDX = -1
       """.stripMargin
 
     val collectorsRS = new ResultSetIterator(connection.createStatement().executeQuery(collectorsIdQuery))

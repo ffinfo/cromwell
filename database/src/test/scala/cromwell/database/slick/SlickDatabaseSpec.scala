@@ -107,7 +107,7 @@ class SlickDatabaseSpec extends FlatSpec with Matchers with ScalaFutures with St
   def databaseForSchemaManager(schemaManager: String): SlickDatabase = {
     val databaseConfig = ConfigFactory.parseString(
       s"""
-         |db.url = "jdbc:hsqldb:mem:$${slick.uniqueSchema};shutdown=false;hsqldb.tx=mvcc"
+         |db.url = "jdbc:hsqldb:mem:$${slick.uniqueSchema};shutdown=false;hsqldb.tx=mvcc;allow_empty_batch=true"
          |db.driver = "org.hsqldb.jdbcDriver"
          |driver = "slick.driver.HsqldbDriver$$"
          |schema.manager = $schemaManager

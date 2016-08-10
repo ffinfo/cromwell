@@ -14,7 +14,7 @@ class ExecutionInfoTableMigration extends MetadataMigration {
       |FROM EXECUTION_INFO
       |  LEFT JOIN EXECUTION ON EXECUTION_INFO.EXECUTION_ID = EXECUTION.EXECUTION_ID
       |  LEFT JOIN WORKFLOW_EXECUTION ON EXECUTION.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
-      |WHERE CALL_FQN NOT LIKE "%$%";
+      |WHERE CALL_FQN NOT LIKE '%$%';
     """.stripMargin
 
   override protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],

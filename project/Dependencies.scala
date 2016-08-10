@@ -66,7 +66,7 @@ object Dependencies {
   val databaseDependencies = List(
     "com.typesafe.slick" %% "slick" % slickV,
     "com.typesafe.slick" %% "slick-hikaricp" % slickV,
-    "org.hsqldb" % "hsqldb" % "2.3.2",
+    "org.hsqldb" % "hsqldb" % "2.3.4",
     "mysql" % "mysql-connector-java" % "5.1.36",
     "com.github.pathikrit" %% "better-files" % betterFilesV % Test,
     "org.broadinstitute" %% "wdl4s" % wdl4sV // Used in migration scripts

@@ -13,7 +13,7 @@ class ExecutionTableMigration extends MetadataMigration {
        SELECT CALL_FQN, EXECUTION.EXECUTION_ID, EXECUTION.STATUS, IDX, ATTEMPT, RC, EXECUTION.START_DT, EXECUTION.END_DT, BACKEND_TYPE, ALLOWS_RESULT_REUSE, WORKFLOW_EXECUTION_UUID
          FROM EXECUTION
            LEFT JOIN WORKFLOW_EXECUTION ON EXECUTION.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
-         WHERE CALL_FQN NOT LIKE "%$%";""".stripMargin
+         WHERE CALL_FQN NOT LIKE '%$%';""".stripMargin
 
   override protected def migrateRow(connection: JdbcConnection, collectors: Set[Int],
                                     statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
