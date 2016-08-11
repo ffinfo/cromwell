@@ -1,10 +1,14 @@
 package cromwell.database.migration.metadata.table
 
+import java.io.{IOException, ByteArrayInputStream}
 import java.sql.{PreparedStatement, ResultSet}
+import java.util.zip.GZIPInputStream
 
 import cromwell.database.migration.metadata.{MetadataMigration, MetadataStatement}
 import liquibase.database.jvm.JdbcConnection
 import liquibase.exception.CustomChangeException
+import org.apache.commons.codec.binary.Base64
+import org.apache.commons.io.IOUtils
 import wdl4s.types.{WdlPrimitiveType, WdlType}
 import wdl4s.values._
 
@@ -17,10 +21,11 @@ abstract class SymbolTableMigration extends MetadataMigration {
       wdlTypeValue <- Try(row.getString("WDL_TYPE"))
       wdlType <- Try(WdlType.fromWdlString(wdlTypeValue))
       wdlValueValue <- Try(row.getString("WDL_VALUE"))
+      inflated <- inflate(wdlValueValue)
 
       wdlValue <- wdlType match {
-        case p: WdlPrimitiveType => p.coerceRawValue(wdlValueValue)
-        case o => Try(wdlType.fromWdlString(wdlValueValue))
+        case p: WdlPrimitiveType => p.coerceRawValue(inflated)
+        case o => Try(wdlType.fromWdlString(inflated))
       }
     } yield wdlValue
 
@@ -32,6 +37,14 @@ abstract class SymbolTableMigration extends MetadataMigration {
   }
 
   def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue): Unit
+
+  def inflate(value: String) = {
+    Try {
+      IOUtils.toString(new GZIPInputStream(new ByteArrayInputStream(Base64.decodeBase64(value))))
+    } recover {
+      case e: IOException => value
+    }
+  }
 
   /**
     * Add all necessary statements to the batch for the provided WdlValue.
