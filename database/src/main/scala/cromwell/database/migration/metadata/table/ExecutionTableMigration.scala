@@ -56,7 +56,7 @@ class ExecutionTableMigration extends MetadataMigration {
     val preemptibleRS = connection.createStatement().executeQuery(preemptibleValueQuery)
     if (preemptibleRS.next()) {
       val maxPreemption = preemptibleRS.getString("ATTRIBUTE_VALUE").toInt
-      statementForCall.addKeyValue("preemptible", maxPreemption > attempt)
+      statementForCall.addKeyValue("preemptible", maxPreemption >= attempt)
     }
   }
 
