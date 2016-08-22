@@ -57,7 +57,7 @@ class WorkflowExecutionActorSpec extends CromwellTestkitSpec with BeforeAndAfter
       val isFatal = (_: Throwable) => false
 
       // Sleep a bit, and let the metadata do its thing in the background.
-      Thread.sleep(1000L)
+      Thread.sleep(3000L)
 
       eventually(isFatal) {
         val metadata = getWorkflowMetadata(workflowId, serviceRegistryActor, None)
