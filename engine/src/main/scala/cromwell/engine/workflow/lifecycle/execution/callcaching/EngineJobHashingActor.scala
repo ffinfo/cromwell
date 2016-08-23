@@ -16,7 +16,8 @@ import wdl4s.values.WdlFile
   *  * (if read enabled): Either a CacheHit(id) or CacheMiss message
   *  * (if write enabled): A CallCacheHashes(hashes) message
   */
-case class EngineJobHashingActor(jobDescriptor: BackendJobDescriptor,
+case class EngineJobHashingActor(receiver: ActorRef,
+                                 jobDescriptor: BackendJobDescriptor,
                                  initializationData: Option[BackendInitializationData],
                                  fileHasherActor: ActorRef,
                                  callCacheReadActor: ActorRef,
@@ -24,8 +25,6 @@ case class EngineJobHashingActor(jobDescriptor: BackendJobDescriptor,
                                  runtimeAttributeDefinitions: Set[RuntimeAttributeDefinition],
                                  backendName: String,
                                  mode: CallCachingActivity) extends LoggingFSM[EJHAState, EJHAData] with ActorLogging {
-
-  val receiver = context.parent
 
   initializeEJHA()
 
@@ -180,7 +179,8 @@ case class EngineJobHashingActor(jobDescriptor: BackendJobDescriptor,
 
 object EngineJobHashingActor {
 
-  def props(jobDescriptor: BackendJobDescriptor,
+  def props(receiver: ActorRef,
+            jobDescriptor: BackendJobDescriptor,
             initializationData: Option[BackendInitializationData],
             fileHasherActor: ActorRef,
             callCacheReadActor: ActorRef,
@@ -188,7 +188,7 @@ object EngineJobHashingActor {
             runtimeAttributeDefinitions: Set[RuntimeAttributeDefinition],
             backendName: String,
             activity: CallCachingActivity): Props =
-    Props(new EngineJobHashingActor(jobDescriptor, initializationData, fileHasherActor, callCacheReadActor, dockerHashLookupActor, runtimeAttributeDefinitions, backendName, activity))
+    Props(new EngineJobHashingActor(receiver, jobDescriptor, initializationData, fileHasherActor, callCacheReadActor, dockerHashLookupActor, runtimeAttributeDefinitions, backendName, activity))
 
   private[callcaching] case class EJHAInitialHashingResults(hashes: Set[HashResult]) extends SuccessfulHashResultMessage
   private[callcaching] case object CheckWhetherAllHashesAreKnown
