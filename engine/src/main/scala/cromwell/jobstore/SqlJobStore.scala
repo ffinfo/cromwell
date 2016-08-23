@@ -56,6 +56,7 @@ class SqlJobStore(sqlDatabase: JobStoreSqlDatabase) extends JobStore {
       case "Int" => WdlIntegerType
       case "Float" => WdlFloatType
       case "Boolean" => WdlBooleanType
+      case "File" => WdlFileType
       case _ => throw new RuntimeException(s"$entry: unrecognized WDL type: ${entry.wdlType}")
     }
     WdlValueSimpleton(entry.simpletonKey, wdlType.coerceRawValue(entry.simpletonValue).get.asInstanceOf[WdlPrimitive])
