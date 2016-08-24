@@ -19,10 +19,10 @@ object MetadataStatement {
   val TimestampIdx = 7
   val ValueTypeIdx = 8
 
-  def makeStatement(connection: JdbcConnection) = connection.prepareStatement(
+  def makeStatement(connection: JdbcConnection): PreparedStatement = connection.prepareStatement(
     """
       |INSERT INTO METADATA_JOURNAL
-      |(WORKFLOW_EXECUTION_UUID, METADATA_KEY, METADATA_CALL_FQN, METADATA_CALL_INDEX, METADATA_CALL_ATTEMPT, METADATA_VALUE, METADATA_TIMESTAMP, METADATA_VALUE_TYPE)
+      |(WORKFLOW_EXECUTION_UUID, METADATA_KEY, CALL_FQN, JOB_SCATTER_INDEX, JOB_RETRY_ATTEMPT, METADATA_VALUE, METADATA_TIMESTAMP, METADATA_VALUE_TYPE)
       |VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     """.stripMargin)
 }
@@ -30,12 +30,14 @@ object MetadataStatement {
 trait MetadataStatement {
   def addKeyValue(key: String, value: Any): Unit
   def addEmptyValue(key: String): Unit
+  def getBatchSize: Int
 }
 
 class MetadataStatementForWorkflow(preparedStatement: PreparedStatement, workflowId: String) extends MetadataStatement {
   val offsetDateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ")
   val logger = LoggerFactory.getLogger("LiquibaseMetadataMigration")
   val dawn = OffsetDateTime.of(0, 1, 1, 0, 0, 0, 0, ZoneOffset.UTC).toSystemTimestamp
+  var batchSizeCounter: Int = 0
 
   private def toTimestamp(timestamp: Timestamp) = timestamp.toSystemOffsetDateTime.format(offsetDateTimeFormatter)
 
@@ -81,7 +83,10 @@ class MetadataStatementForWorkflow(preparedStatement: PreparedStatement, workflo
     }
 
     preparedStatement.addBatch()
+    batchSizeCounter += 1
   }
+
+  override def getBatchSize = batchSizeCounter
 
   private def add(key: String, value: Any, errorMessage: String) = try {
     setStatement()

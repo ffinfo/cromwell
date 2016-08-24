@@ -24,5 +24,10 @@
         <customChange class="cromwell.database.migration.metadata.table.CallOutputSymbolTableMigration" />
         <customChange class="cromwell.database.migration.metadata.table.WorkflowOutputSymbolTableMigration" />
     </changeSet>
-
+    <changeSet author="tjeandet" id="re-rename-idx-to-index">
+        <renameColumn columnDataType="INT"
+                      newColumnName="INDEX"
+                      oldColumnName="IDX"
+                      tableName="SYMBOL"/>
+    </changeSet>
 </databaseChangeLog>

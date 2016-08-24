@@ -10,12 +10,14 @@ import liquibase.database.jvm.JdbcConnection
   */
 class ExecutionTableMigration extends MetadataMigration {
   override protected def selectQuery: String = """
-       SELECT CALL_FQN, EXECUTION.EXECUTION_ID, EXECUTION.STATUS, IDX, ATTEMPT, RC, EXECUTION.START_DT, EXECUTION.END_DT, BACKEND_TYPE, ALLOWS_RESULT_REUSE, WORKFLOW_EXECUTION_UUID
-         FROM EXECUTION
-           LEFT JOIN WORKFLOW_EXECUTION ON EXECUTION.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
-         WHERE CALL_FQN NOT LIKE '%$%';""".stripMargin
+       SELECT CALL_FQN, EXECUTION.EXECUTION_ID, EXECUTION.STATUS, IDX, ATTEMPT,
+         |  RC, EXECUTION.START_DT, EXECUTION.END_DT, BACKEND_TYPE, ALLOWS_RESULT_REUSE, WORKFLOW_EXECUTION_UUID, IFNULL(ra.ATTRIBUTE_VALUE >= ATTEMPT, NULL) as preemptible
+         |FROM EXECUTION
+         |  JOIN WORKFLOW_EXECUTION ON EXECUTION.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
+         |  LEFT JOIN RUNTIME_ATTRIBUTES ra ON EXECUTION.EXECUTION_ID = ra.EXECUTION_ID AND ra.ATTRIBUTE_NAME = "preemptible"
+         |                                     WHERE CALL_FQN NOT LIKE '%$%';""".stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Int = {
     val attempt: Int = row.getInt("ATTEMPT")
 
     val metadataStatement = new MetadataStatementForCall(statement,
@@ -33,6 +35,11 @@ class ExecutionTableMigration extends MetadataMigration {
     metadataStatement.addKeyValue("executionStatus", row.getString("STATUS"))
     metadataStatement.addKeyValue("returnCode", if (returnCode != null) returnCode.toInt else null)
     metadataStatement.addKeyValue("cache:allowResultReuse", row.getBoolean("ALLOWS_RESULT_REUSE"))
+    // getBoolean returns false if the value is null - which means we need to check manually if the value was null so we don't add it if it was
+    val preemptible = row.getBoolean("preemptible")
+    if (!row.wasNull()) {
+      metadataStatement.addKeyValue("preemptible", preemptible)
+    }
 
     // Fields that we want regardless of whether or not information exists (if not it's an empty object)
     metadataStatement.addEmptyValue("outputs")
@@ -40,24 +47,7 @@ class ExecutionTableMigration extends MetadataMigration {
     metadataStatement.addEmptyValue("runtimeAttributes")
     metadataStatement.addEmptyValue("executionEvents[]")
 
-    migratePreemptibleField(connection, row.getInt("EXECUTION_ID"), attempt, metadataStatement)
-  }
-
-  def migratePreemptibleField(connection: JdbcConnection, executionId: Int, attempt: Int, statementForCall: MetadataStatementForCall) = {
-    val preemptibleValueQuery = s"""
-      SELECT ATTRIBUTE_VALUE, WORKFLOW_EXECUTION_UUID, CALL_FQN, IDX, ATTEMPT
-        FROM RUNTIME_ATTRIBUTES, EXECUTION, WORKFLOW_EXECUTION
-        WHERE RUNTIME_ATTRIBUTES.EXECUTION_ID = EXECUTION.EXECUTION_ID
-          AND EXECUTION.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
-          AND ATTRIBUTE_NAME = "preemptible"
-          AND RUNTIME_ATTRIBUTES.EXECUTION_ID = $executionId;
-    """.stripMargin
-
-    val preemptibleRS = connection.createStatement().executeQuery(preemptibleValueQuery)
-    if (preemptibleRS.next()) {
-      val maxPreemption = preemptibleRS.getString("ATTRIBUTE_VALUE").toInt
-      statementForCall.addKeyValue("preemptible", maxPreemption >= attempt)
-    }
+    metadataStatement.getBatchSize
   }
 
   override def getConfirmationMessage: String = "Execution Table migration complete."

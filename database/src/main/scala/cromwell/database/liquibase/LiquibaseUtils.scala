@@ -21,10 +21,11 @@ object LiquibaseUtils {
   /**
     * Updates a liquibase schema to the latest version.
     *
-    * @param jdbcConnection A jdbc connection to the database.
+    * @param jdbcConnection1 A jdbc connection to the database.
+    * @param jdbcConnection2 A jdbc connection to the database.
     */
-  def updateSchema(jdbcConnection: Connection): Unit = {
-    val liquibaseConnection = newConnection(jdbcConnection)
+  def updateSchema(jdbcConnection1: Connection, jdbcConnection2: Connection): Unit = {
+    val liquibaseConnection = newMultiConnection(jdbcConnection1, jdbcConnection2)
     try {
       val liquibase = new Liquibase(DefaultChangeLog, new ClassLoaderResourceAccessor(), liquibaseConnection)
       checkForChangeLogDir(liquibase)
@@ -46,6 +47,14 @@ object LiquibaseUtils {
     jdbcConnection.getMetaData.getDatabaseProductName match {
       case HsqlDatabaseProperties.PRODUCT_NAME => new HsqlConnection(jdbcConnection)
       case _ => new JdbcConnection(jdbcConnection)
+    }
+  }
+
+  def newMultiConnection(connection: Connection, connection2: Connection): DatabaseConnection = {
+    (connection.getMetaData.getDatabaseProductName, connection2.getMetaData.getDatabaseProductName) match {
+      case (HsqlDatabaseProperties.PRODUCT_NAME, HsqlDatabaseProperties.PRODUCT_NAME) => new MultiHsqlConnection(connection, connection2)
+      case (name1, name2) if name1 == name2 => new MultiJdbcConnection(connection, connection2)
+      case _ => throw new Error("Connections in a MultiConnection must have same database type.")
     }
   }
 

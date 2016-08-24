@@ -15,7 +15,7 @@ import wdl4s.values._
 import scala.util.{Failure, Success, Try}
 
 abstract class SymbolTableMigration extends MetadataMigration {
-  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Int = {
     // Try to coerce the value to a WdlValue
     val value = for {
       wdlTypeValue <- Try(row.getString("WDL_TYPE"))
@@ -36,7 +36,7 @@ abstract class SymbolTableMigration extends MetadataMigration {
     }
   }
 
-  def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue): Unit
+  def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue): Int
 
   def inflate(value: String) = {
     Try {

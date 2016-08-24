@@ -1,7 +1,8 @@
 package cromwell.database.migration.metadata
 
-import java.sql.{PreparedStatement, ResultSet}
+import java.sql.{PreparedStatement, ResultSet, Statement}
 
+import cromwell.database.liquibase.MultiJdbcConnection
 import cromwell.database.migration.ResultSetIterator
 import liquibase.change.custom.CustomTaskChange
 import liquibase.database.Database
@@ -15,17 +16,33 @@ import scala.util.{Success, Try}
 
 object MetadataMigration {
   var collectors: Set[Int] = _
+  val FetchSize = Integer.MIN_VALUE
+  val BatchSize = 50000
 }
 
 trait MetadataMigration extends CustomTaskChange {
+  import MetadataMigration._
+
   val logger = LoggerFactory.getLogger("LiquibaseMetadataMigration")
+  var batchCounter = 0
 
   protected def selectQuery: String
-  protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit
+
+  /**
+    * Migrate a row to the metadata table
+    * @return number of insert statements added to the batch
+    */
+  protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Int
   protected def filterCollectors: Boolean = true
 
-  private def migrate(connection: JdbcConnection, collectors: Set[Int]) = {
-    val executionDataResultSet = connection.createStatement().executeQuery(selectQuery)
+  private def migrate(connection: MultiJdbcConnection, collectors: Set[Int]) = {
+    logger.info("Executing SELECT")
+    val selectStatement: Statement = connection.otherConnection.createStatement(java.sql.ResultSet.TYPE_FORWARD_ONLY,
+      java.sql.ResultSet.CONCUR_READ_ONLY)
+    selectStatement.setFetchSize(FetchSize)
+    val executionDataResultSet = selectStatement.executeQuery(selectQuery)
+    logger.info("SELECT Done")
+
     val metadataInsertStatement = MetadataStatement.makeStatement(connection)
 
     val executionIterator = new ResultSetIterator(executionDataResultSet)
@@ -43,15 +60,21 @@ trait MetadataMigration extends CustomTaskChange {
 
     filtered.zipWithIndex foreach {
       case (row, idx) =>
-        migrateRow(connection, metadataInsertStatement, row, idx)
-        if (idx % 100 == 0) {
+        batchCounter += migrateRow(connection, metadataInsertStatement, row, idx)
+
+        if (batchCounter >= BatchSize) {
+          logger.info("Executing batch and committing")
           metadataInsertStatement.executeBatch()
           connection.commit()
+          batchCounter = 0
+          logger.info("Committed")
         }
     }
 
     metadataInsertStatement.executeBatch()
     connection.commit()
+
+    executionDataResultSet.close()
   }
 
   private var resourceAccessor: ResourceAccessor = _
@@ -89,7 +112,7 @@ trait MetadataMigration extends CustomTaskChange {
 
   override def execute(database: Database): Unit = {
     try {
-      val dbConn = database.getConnection.asInstanceOf[JdbcConnection]
+      val dbConn = database.getConnection.asInstanceOf[MultiJdbcConnection]
       dbConn.setAutoCommit(false)
       migrate(dbConn, getCollectors(dbConn))
     } catch {

@@ -124,7 +124,10 @@ object LiquibaseSchemaManager {
 class LiquibaseSchemaManager extends SchemaManager {
   override def updateSchema[Profile <: JdbcProfile](profile: Profile, schema: Profile#SchemaDescription) = {
     import profile.api._
-    SimpleDBIO(context => LiquibaseUtils.updateSchema(context.connection))
+    SimpleDBIO { context =>
+      val connectionForStreaming: Connection = context.session.database.createSession().conn
+      LiquibaseUtils.updateSchema(context.connection, connectionForStreaming)
+    }
   }
 }
 

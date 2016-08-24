@@ -16,7 +16,7 @@ class FailureEventTableMigration extends MetadataMigration {
       |  LEFT JOIN EXECUTION ON EXECUTION.EXECUTION_ID = FAILURE_EVENT.EXECUTION_ID;
     """.stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Int = {
     val metadataStatement = if (row.getString("CALL_FQN") != null) {
       // Call failure
       new MetadataStatementForCall(statement,
@@ -35,6 +35,7 @@ class FailureEventTableMigration extends MetadataMigration {
 
     metadataStatement.addKeyValue(s"failures[$idx]:failure", row.getString("EVENT_MESSAGE"))
     metadataStatement.addKeyValue(s"failures[$idx]:timestamp", row.getTimestamp("EVENT_TIMESTAMP"))
+    metadataStatement.getBatchSize
   }
 
   override def getConfirmationMessage: String = "FailureEvent Table migration complete."

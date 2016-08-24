@@ -14,7 +14,7 @@ class RuntimeAttributesTableMigration extends MetadataMigration {
       |     LEFT JOIN WORKFLOW_EXECUTION ON EXECUTION.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID;
     """.stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Int = {
     val statementForCall = new MetadataStatementForCall(
       statement,
       row.getString("WORKFLOW_EXECUTION_UUID"),
@@ -27,6 +27,7 @@ class RuntimeAttributesTableMigration extends MetadataMigration {
     val attributeValue = row.getString("ATTRIBUTE_VALUE")
 
     statementForCall.addKeyValue(s"runtimeAttributes:$attributeName", attributeValue)
+    statementForCall.getBatchSize
   }
 
   override def getConfirmationMessage: String = "RuntimeAttributes Table migration complete."

@@ -7,29 +7,19 @@ import wdl4s.values._
 
 class CallOutputSymbolTableMigration extends SymbolTableMigration {
   override protected def selectQuery: String = """
-     SELECT SYMBOL.SCOPE, SYMBOL.NAME, MaxExecution.IDX, IO, WDL_TYPE,
-         WDL_VALUE, WORKFLOW_EXECUTION_UUID, ExecutionId.EXECUTION_ID, REPORTABLE_RESULT,
-         MaxExecution.MaxAttempt
-       FROM SYMBOL
-         LEFT JOIN WORKFLOW_EXECUTION ON SYMBOL.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
-         LEFT JOIN(
-                    SELECT CALL_FQN, IDX, WORKFLOW_EXECUTION_ID, MAX(EXECUTION.ATTEMPT) AS MaxAttempt
-                    FROM EXECUTION
-                    GROUP BY EXECUTION.CALL_FQN, EXECUTION.IDX, EXECUTION.WORKFLOW_EXECUTION_ID
-                  ) MaxExecution
-           ON SYMBOL.SCOPE = MaxExecution.CALL_FQN
-              AND SYMBOL.WORKFLOW_EXECUTION_ID = MaxExecution.WORKFLOW_EXECUTION_ID
-              AND SYMBOL.IDX = MaxExecution.IDX
-         LEFT JOIN(SELECT EXECUTION_ID, CALL_FQN, IDX, WORKFLOW_EXECUTION_ID, ATTEMPT
-                   FROM EXECUTION
-                  ) ExecutionId
-           ON MaxExecution.CALL_FQN = ExecutionId.CALL_FQN
-              AND MaxExecution.WORKFLOW_EXECUTION_ID = ExecutionId.WORKFLOW_EXECUTION_ID
-              AND MaxExecution.IDX = ExecutionId.IDX
-              AND MaxExecution.MaxAttempt = ExecutionId.ATTEMPT
-       WHERE SYMBOL.IO = 'OUTPUT';""".stripMargin
+     SELECT SYMBOL.SCOPE, SYMBOL.NAME, ex.IDX, IO, WDL_TYPE,
+|          WDL_VALUE, WORKFLOW_EXECUTION_UUID, ex.EXECUTION_ID, REPORTABLE_RESULT,
+|          MAX(ex.ATTEMPT) as attempt
+|        FROM SYMBOL
+|          JOIN WORKFLOW_EXECUTION ON SYMBOL.WORKFLOW_EXECUTION_ID = WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID
+|          LEFT JOIN EXECUTION ex
+|            ON SYMBOL.WORKFLOW_EXECUTION_ID = ex.WORKFLOW_EXECUTION_ID
+|            AND SYMBOL.SCOPE = ex.CALL_FQN
+|               AND SYMBOL.IDX = ex.IDX
+|        WHERE SYMBOL.IO = 'OUTPUT'
+|          GROUP BY ex.CALL_FQN, ex.IDX, SYMBOL.NAME, SYMBOL.WORKFLOW_EXECUTION_ID;""".stripMargin
 
-  override def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue) = {
+  override def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue): Int = {
     val scope = row.getString("SCOPE")
     val name = row.getString("NAME")
     val index = row.getInt("IDX")
@@ -39,10 +29,11 @@ class CallOutputSymbolTableMigration extends SymbolTableMigration {
       row.getString("WORKFLOW_EXECUTION_UUID"),
       scope,
       index,
-      row.getInt("MaxAttempt")
+      row.getInt("attempt")
     )
 
     addWdlValue(s"outputs:$name", wdlValue, metadataStatementForCall)
+    metadataStatementForCall.getBatchSize
   }
 
   override def getConfirmationMessage: String = "Call outputs from Symbol Table migration complete."

@@ -15,17 +15,18 @@ class ExecutionEventTableMigration extends MetadataMigration {
       |  LEFT JOIN WORKFLOW_EXECUTION ON WORKFLOW_EXECUTION.WORKFLOW_EXECUTION_ID = EXECUTION.WORKFLOW_EXECUTION_ID;
     """.stripMargin
 
-  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Unit = {
-      val metadataStatement = new MetadataStatementForCall(statement,
-        row.getString("WORKFLOW_EXECUTION_UUID"),
-        row.getString("CALL_FQN"),
-        row.getInt("IDX"),
-        row.getInt("ATTEMPT")
-      )
+  override protected def migrateRow(connection: JdbcConnection, statement: PreparedStatement, row: ResultSet, idx: Int): Int = {
+    val metadataStatement = new MetadataStatementForCall(statement,
+      row.getString("WORKFLOW_EXECUTION_UUID"),
+      row.getString("CALL_FQN"),
+      row.getInt("IDX"),
+      row.getInt("ATTEMPT")
+    )
 
-      metadataStatement.addKeyValue(s"executionEvents[$idx]:description", row.getString("DESCRIPTION"))
-      metadataStatement.addKeyValue(s"executionEvents[$idx]:startTime", row.getTimestamp("START_DT"))
-      metadataStatement.addKeyValue(s"executionEvents[$idx]:endTime", row.getTimestamp("END_DT"))
+    metadataStatement.addKeyValue(s"executionEvents[$idx]:description", row.getString("DESCRIPTION"))
+    metadataStatement.addKeyValue(s"executionEvents[$idx]:startTime", row.getTimestamp("START_DT"))
+    metadataStatement.addKeyValue(s"executionEvents[$idx]:endTime", row.getTimestamp("END_DT"))
+    metadataStatement.getBatchSize
   }
 
   override def getConfirmationMessage: String = "ExecutionEvent Table migration complete."

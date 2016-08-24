@@ -15,12 +15,13 @@ class WorkflowOutputSymbolTableMigration extends SymbolTableMigration {
 
   override val filterCollectors = false
 
-  override def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue) = {
+  override def processSymbol(statement: PreparedStatement, row: ResultSet, idx: Int, wdlValue: WdlValue): Int = {
     val scope = row.getString("SCOPE")
     val name = row.getString("NAME")
 
     val metadataStatementForWorkflow = new MetadataStatementForWorkflow(statement, row.getString("WORKFLOW_EXECUTION_UUID"))
     addWdlValue(s"outputs:$scope.$name", wdlValue, metadataStatementForWorkflow)
+    metadataStatementForWorkflow.getBatchSize
   }
 
   override def getConfirmationMessage: String = "Workflow outputs from Symbol Table migration complete."
