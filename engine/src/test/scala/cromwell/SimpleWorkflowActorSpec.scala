@@ -9,7 +9,6 @@ import cromwell.SimpleWorkflowActorSpec._
 import cromwell.core.{WorkflowId, WorkflowSourceFiles}
 import cromwell.engine.workflow.WorkflowActor
 import cromwell.engine.workflow.WorkflowActor.{StartNewWorkflow, StartWorkflowCommand}
-import cromwell.engine.workflow.lifecycle.execution.callcaching.DockerHashLookupWorkerActor
 import cromwell.services.metadata.MetadataEvent
 import cromwell.services.metadata.MetadataService.PutMetadataAction
 import cromwell.util.SampleWdl
@@ -18,7 +17,6 @@ import cromwell.util.SampleWdl.HelloWorld.Addressee
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Promise}
 import scala.language.postfixOps
-
 
 object SimpleWorkflowActorSpec {
 
@@ -65,8 +63,7 @@ class SimpleWorkflowActorSpec extends CromwellTestkitSpec {
       factory = new WorkflowActor(workflowId, StartNewWorkflow, workflowSources, ConfigFactory.load(),
         watchActor,
         system.actorOf(Props.empty, s"workflow-copy-log-router-$workflowId-${UUID.randomUUID()}"),
-        system.actorOf(AlwaysHappyJobStoreActor.props),
-        system.actorOf(Props(new DockerHashLookupWorkerActor))),
+        system.actorOf(AlwaysHappyJobStoreActor.props)),
       name = s"workflow-actor-$workflowId"
     )
     WorkflowActorAndMetadataPromise(workflowActor, promise)

@@ -1,14 +1,13 @@
 package cromwell.server
 
 import akka.actor.SupervisorStrategy.Escalate
-import akka.actor.{Actor, ActorInitializationException, ActorRef, OneForOneStrategy, Props}
+import akka.actor.{Actor, ActorInitializationException, ActorRef, OneForOneStrategy}
 import akka.event.Logging
 import akka.routing.RoundRobinPool
 import com.typesafe.config.ConfigFactory
 import cromwell.database.CromwellDatabase
-import cromwell.engine.workflow.lifecycle.CopyWorkflowLogsActor
 import cromwell.engine.workflow.WorkflowManagerActor
-import cromwell.engine.workflow.lifecycle.execution.callcaching.DockerHashLookupWorkerActor
+import cromwell.engine.workflow.lifecycle.CopyWorkflowLogsActor
 import cromwell.engine.workflow.workflowstore.{SqlWorkflowStore, WorkflowStore, WorkflowStoreActor}
 import cromwell.jobstore.{JobStore, JobStoreActor, SqlJobStore}
 import cromwell.services.ServiceRegistryActor
@@ -44,11 +43,9 @@ import lenthall.config.ScalaConfig.EnhancedScalaConfig
   lazy val jobStore: JobStore = new SqlJobStore(CromwellDatabase.databaseInterface)
   lazy val jobStoreActor = context.actorOf(JobStoreActor.props(jobStore), "JobStoreActor")
 
-  lazy val dockerHashLookupActor = context.actorOf(RoundRobinPool(25)
-    .props(Props(new DockerHashLookupWorkerActor)),
-    "DockerHashLookupWorkerActor")
-
-  lazy val workflowManagerActor = context.actorOf(WorkflowManagerActor.props(workflowStoreActor, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor, dockerHashLookupActor), "WorkflowManagerActor")
+  lazy val workflowManagerActor = context.actorOf(
+    WorkflowManagerActor.props(workflowStoreActor, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor),
+    "WorkflowManagerActor")
 
   override def receive = {
     case _ => logger.error("CromwellRootActor is receiving a message. It prefers to be left alone!")

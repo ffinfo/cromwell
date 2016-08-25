@@ -13,7 +13,6 @@ import cromwell.database.CromwellDatabase
 import cromwell.engine.workflow.WorkflowDescriptorBuilder
 import cromwell.engine.workflow.lifecycle.execution.EngineJobExecutionActor._
 import cromwell.engine.workflow.lifecycle.execution.JobPreparationActor.BackendJobPreparationFailed
-import cromwell.engine.workflow.lifecycle.execution.callcaching.DockerHashLookupWorkerActor
 import cromwell.jobstore.JobStoreActor.{JobComplete, JobNotComplete}
 import cromwell.jobstore.{JobResultFailure, JobResultSuccess, JobStoreActor, SqlJobStore, Pending => _}
 import cromwell.util.SampleWdl
@@ -64,7 +63,6 @@ class EngineJobExecutionActorSpec extends CromwellTestkitSpec with Matchers with
       restarting = restarting,
       serviceRegistryActor = CromwellTestkitSpec.ServiceRegistryActorInstance,
       jobStoreActor = system.actorOf(JobStoreActor.props(jobStore)),
-      dockerHashLookupActor = system.actorOf(Props(new DockerHashLookupWorkerActor)),
       backendName = "NOT USED",
       callCachingMode = CallCachingOff
     ), ejeaParent.ref, s"EngineJobExecutionActorSpec-$workflowId")
@@ -110,8 +108,6 @@ class EngineJobExecutionActorSpec extends CromwellTestkitSpec with Matchers with
       ejea.setState(CheckingJobStore)
       val task = mock[Task]
       task.declarations returns Seq.empty
-
-      val call = Call(None, "wf.call", task, Set.empty, Map.empty, None)
 
       ejea ! JobNotComplete
 

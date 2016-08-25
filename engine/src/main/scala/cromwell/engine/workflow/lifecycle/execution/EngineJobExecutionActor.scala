@@ -26,7 +26,6 @@ class EngineJobExecutionActor(jobKey: BackendJobDescriptorKey,
                               restarting: Boolean,
                               serviceRegistryActor: ActorRef,
                               jobStoreActor: ActorRef,
-                              dockerHashLookupActor: ActorRef,
                               backendName: String,
                               callCachingMode: CallCachingMode) extends LoggingFSM[EngineJobExecutionActorState, EJEAData] with WorkflowLogging {
 
@@ -190,7 +189,7 @@ class EngineJobExecutionActor(jobKey: BackendJobDescriptorKey,
 
   def initializeJobHashing(jobDescriptor: BackendJobDescriptor, activity: CallCachingActivity) = {
     val props = EngineJobHashingActor.props(jobDescriptor, initializationData, factory.fileContentsHasherActor,
-      dockerHashLookupActor, factory.runtimeAttributeDefinitions(initializationData), backendName, activity)
+      factory.runtimeAttributeDefinitions(initializationData), backendName, activity)
     context.actorOf(props, s"ejha_for_$jobDescriptor")
   }
 
@@ -271,7 +270,6 @@ object EngineJobExecutionActor {
             restarting: Boolean,
             serviceRegistryActor: ActorRef,
             jobStoreActor: ActorRef,
-            dockerHashLookupActor: ActorRef,
             backendName: String,
             callCachingMode: CallCachingMode) = {
     Props(new EngineJobExecutionActor(jobDescriptorKey,
@@ -281,7 +279,6 @@ object EngineJobExecutionActor {
       restarting,
       serviceRegistryActor,
       jobStoreActor,
-      dockerHashLookupActor,
       backendName: String,
       callCachingMode)).withDispatcher(EngineDispatcher)
   }

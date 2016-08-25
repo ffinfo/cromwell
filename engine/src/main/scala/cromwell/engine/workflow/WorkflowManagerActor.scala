@@ -51,9 +51,10 @@ object WorkflowManagerActor {
   def props(workflowStore: ActorRef,
             serviceRegistryActor: ActorRef,
             workflowLogCopyRouter: ActorRef,
-            jobStoreActor: ActorRef,
-            dockerHashLookupActor: ActorRef): Props = {
-    Props(new WorkflowManagerActor(workflowStore, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor, dockerHashLookupActor)).withDispatcher(EngineDispatcher)
+            jobStoreActor: ActorRef): Props = {
+    Props(
+      new WorkflowManagerActor(workflowStore, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor)
+    ).withDispatcher(EngineDispatcher)
   }
 
   /**
@@ -88,15 +89,16 @@ class WorkflowManagerActor(config: Config,
                            val workflowStore: ActorRef,
                            val serviceRegistryActor: ActorRef,
                            val workflowLogCopyRouter: ActorRef,
-                           val jobStoreActor: ActorRef,
-                           val dockerHashLookupActor: ActorRef)
+                           val jobStoreActor: ActorRef)
   extends LoggingFSM[WorkflowManagerState, WorkflowManagerData] {
 
   def this(workflowStore: ActorRef,
            serviceRegistryActor: ActorRef,
            workflowLogCopyRouter: ActorRef,
-           jobStoreActor: ActorRef,
-           dockerHashLookupActor: ActorRef) = this(ConfigFactory.load, workflowStore, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor, dockerHashLookupActor)
+           jobStoreActor: ActorRef) = {
+    this(ConfigFactory.load, workflowStore, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor)
+  }
+
   implicit val actorSystem = context.system
   private implicit val timeout = Timeout(5 seconds)
 
@@ -256,7 +258,8 @@ class WorkflowManagerActor(config: Config,
       StartNewWorkflow
     }
 
-    val wfProps = WorkflowActor.props(workflowId, startMode, workflow.sources, config, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor, dockerHashLookupActor)
+    val wfProps = WorkflowActor.props(
+      workflowId, startMode, workflow.sources, config, serviceRegistryActor, workflowLogCopyRouter, jobStoreActor)
     val wfActor = context.actorOf(wfProps, name = s"WorkflowActor-$workflowId")
 
     wfActor ! SubscribeTransitionCallBack(self)

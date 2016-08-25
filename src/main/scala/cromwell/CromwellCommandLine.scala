@@ -43,6 +43,7 @@ object RunSingle {
 
     val sourceFiles = (wdl |@| inputsJson |@| optionsJson) { WorkflowSourceFiles.apply }
 
+    import scalaz.Validation.FlatMap._
     val runSingle = for {
       sources <- sourceFiles
       _ <- writeableMetadataPath(metadataPath)

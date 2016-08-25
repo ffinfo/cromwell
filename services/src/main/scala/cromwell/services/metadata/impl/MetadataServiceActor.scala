@@ -16,7 +16,6 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-
 object MetadataServiceActor {
 
   val MetadataSummaryRefreshInterval =
@@ -44,19 +43,18 @@ case class MetadataServiceActor(serviceConfig: Config, globalConfig: Config) ext
 
   private def validateWorkflowId(validation: ValidateWorkflowIdAndExecute): Unit = {
     val possibleWorkflowId = validation.possibleWorkflowId
-    val requestContext = validation.requestContext
     val callback = validation.validationCallback
 
     Try(UUID.fromString(possibleWorkflowId)) match {
-      case Failure(t) => callback.onMalformed(possibleWorkflowId)(requestContext)
+      case Failure(t) => callback.onMalformed(possibleWorkflowId)
       case Success(uuid) =>
         workflowExistsWithId(possibleWorkflowId) onComplete {
           case Success(true) =>
-            callback.onRecognized(WorkflowId(uuid))(requestContext)
+            callback.onRecognized(WorkflowId(uuid))
           case Success(false) =>
-            callback.onUnrecognized(possibleWorkflowId)(requestContext)
+            callback.onUnrecognized(possibleWorkflowId)
           case Failure(t) =>
-            callback.onFailure(possibleWorkflowId, t)(requestContext)
+            callback.onFailure(possibleWorkflowId, t)
         }
     }
   }

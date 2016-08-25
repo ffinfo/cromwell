@@ -41,24 +41,30 @@ trait CromwellApiService extends HttpService with PerRequestCreator {
     workflowLogsRoute ~ abortRoute ~ metadataRoute ~ timingRoute ~ callCachingRoute ~ statusRoute ~ backendRoute
 
   private def withRecognizedWorkflowId(possibleWorkflowId: String)(recognizedWorkflowId: WorkflowId => Route): Route = {
-    // The submitted value is malformed as a UUID and therefore not possibly recognized.
-    def malformedWorkflowId(malformed: String) = failBadRequest(new RuntimeException(s"Invalid workflow ID: '$malformed'."))
+    def callback(requestContext: RequestContext) = new ValidationCallback {
+      // The submitted value is malformed as a UUID and therefore not possibly recognized.
+      override def onMalformed(possibleWorkflowId: String): Unit = {
+        val exception = new RuntimeException(s"Invalid workflow ID: '$possibleWorkflowId'.")
+        failBadRequest(exception)(requestContext)
+      }
 
-    def unrecognizedWorkflowId(unrecognized: String): Route = respondWithMediaType(`application/json`) {
-      failBadRequest(new RuntimeException(s"Unrecognized workflow ID: $unrecognized"), StatusCodes.NotFound)
-    }
+      override def onUnrecognized(possibleWorkflowId: String): Unit = {
+        val exception = new RuntimeException(s"Unrecognized workflow ID: $possibleWorkflowId")
+        failBadRequest(exception, StatusCodes.NotFound)(requestContext)
+      }
 
-    def failedWorkflowIdLookup(failed: String, t: Throwable) = failBadRequest(new RuntimeException(s"Failed lookup attempt for workflow ID $failed", t))
+      override def onFailure(possibleWorkflowId: String, throwable: Throwable): Unit = {
+        val exception = new RuntimeException(s"Failed lookup attempt for workflow ID $possibleWorkflowId", throwable)
+        failBadRequest(exception)(requestContext)
+      }
 
-    val callback = new ValidationCallback {
-      override def onMalformed = malformedWorkflowId
-      override def onUnrecognized = unrecognizedWorkflowId
-      override def onFailure = failedWorkflowIdLookup
-      override def onRecognized = recognizedWorkflowId
+      override def onRecognized(workflowId: WorkflowId): Unit = {
+        recognizedWorkflowId(workflowId)(requestContext)
+      }
     }
 
     requestContext => {
-      val message = ValidateWorkflowIdAndExecute(possibleWorkflowId, requestContext, callback)
+      val message = ValidateWorkflowIdAndExecute(possibleWorkflowId, callback(requestContext))
       serviceRegistryActor ! message
     }
   }
