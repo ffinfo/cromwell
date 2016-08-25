@@ -3,11 +3,13 @@ package cromwell.backend.impl.spark
 import java.nio.file.FileSystems
 import java.nio.file.attribute.PosixFilePermission
 
-import akka.actor.{Props}
+import akka.actor.Props
 import cromwell.backend.BackendJobExecutionActor.{BackendJobExecutionResponse, FailedNonRetryableResponse, SucceededResponse}
+import cromwell.backend.impl.spark.SparkClusterProcess._
 import cromwell.backend.io.JobPaths
 import cromwell.backend.sfs.{SharedFileSystem, SharedFileSystemExpressionFunctions}
 import cromwell.backend.{BackendConfigurationDescriptor, BackendJobDescriptor, BackendJobExecutionActor}
+import cromwell.core.{TailedWriter, UntailedWriter}
 import wdl4s.parser.MemoryUnit
 import wdl4s.util.TryUtil
 
@@ -29,13 +31,19 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
   import SparkJobExecutionActor._
   import better.files._
   import cromwell.core.PathFactory._
+  import SparkClusterConstants._
+  import SparkCommands._
 
-  private val tag = s"SparkJobExecutionActor-${jobDescriptor.call.fullyQualifiedName}:"
+  private val tag = s"SparkJobExecutionActor-${jobDescriptor.key.tag}:"
 
   lazy val cmds = new SparkCommands
-  lazy val extProcess = new SparkProcess
+  lazy val clusterExtProcess = new SparkClusterProcess()(context.system)
+
+  lazy val extProcess = new SparkProcess{}
   lazy val clusterManagerConfig = configurationDescriptor.backendConfig.getConfig("cluster-manager")
   private val fileSystemsConfig = configurationDescriptor.backendConfig.getConfig("filesystems")
+  private val sparkMaster = configurationDescriptor.backendConfig.getString("master").toLowerCase
+  private val sparkDeployMode = configurationDescriptor.backendConfig.getString("deployMode").toLowerCase
   override val sharedFileSystemConfig = fileSystemsConfig.getConfig("local")
   private val workflowDescriptor = jobDescriptor.descriptor
   private val jobPaths = new JobPaths(workflowDescriptor, configurationDescriptor.backendConfig, jobDescriptor.key)
@@ -46,6 +54,9 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
 
   private lazy val stdoutWriter = extProcess.untailedWriter(jobPaths.stdout)
   private lazy val stderrWriter = extProcess.tailedWriter(100, jobPaths.stderr)
+
+  private lazy val clusterStdoutWriter = clusterExtProcess.untailedWriter(jobPaths.stdout)
+  private lazy val clusterStderrWriter = clusterExtProcess.tailedWriter(100, jobPaths.stderr)
 
   private val call = jobDescriptor.key.call
   private val callEngineFunction = SharedFileSystemExpressionFunctions(jobPaths, fileSystems)
@@ -65,32 +76,58 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
     * Restart or resume a previously-started job.
     */
   override def recover: Future[BackendJobExecutionResponse] = {
-    log.warning("{} HtCondor backend currently doesn't support recovering jobs. Starting {} again.", tag, jobDescriptor.key.call.fullyQualifiedName)
-    Future(executeTask())
+    log.warning("{} Spark backend currently doesn't support recovering jobs. Starting {} again.", tag, jobDescriptor.key.call.fullyQualifiedName)
+    taskLauncher
+    executionResponse.future
   }
 
   /**
     * Execute a new job.
     */
   override def execute: Future[BackendJobExecutionResponse] = {
-    prepareAndExecute
+    createExecutionFolderAndScript()
+    taskLauncher
     executionResponse.future
   }
 
-  private def executeTask(): BackendJobExecutionResponse = {
+  private def executeTask(process: SparkProcess, stdoutWriter: UntailedWriter, stderrWriter: TailedWriter): Future[BackendJobExecutionResponse] = {
+    val submitResult = submitSparkScript(process, ProcessLogger(stdoutWriter.writeWithNewline, stderrWriter.writeWithNewline))
+    List(stdoutWriter.writer, stderrWriter.writer).foreach(_.flushAndClose())
+
+    resolveExecutionResult(submitResult, runtimeAttributes.failOnStderr)
+  }
+
+  private def submitSparkScript(sparkProcess: SparkProcess, processLogger: ProcessLogger): Try[Int] = {
     val argv = Seq(SparkCommands.SHELL_CMD, scriptPath.toString)
-    val process = extProcess.externalProcess(argv, ProcessLogger(stdoutWriter.writeWithNewline, stderrWriter.writeWithNewline))
+    val process = sparkProcess.externalProcess(argv, processLogger)
     val jobReturnCode = Try(process.exitValue()) // blocks until process (i.e. spark submission) finishes
     log.debug("{} Return code of spark submit command: {}", tag, jobReturnCode)
-    List(stdoutWriter.writer, stderrWriter.writer).foreach(_.flushAndClose())
-    (jobReturnCode, runtimeAttributes.failOnStderr) match {
-      case (Success(0), false) => processSuccess(0)
-      case (Success(0), true) if jobPaths.stderr.lines.toList.isEmpty => processSuccess(0)
-      case (Success(0), true) => FailedNonRetryableResponse(jobDescriptor.key,
-        new IllegalStateException(s"Execution process failed although return code is zero but stderr is not empty"), Option(0))
-      case (Success(rc), _) => FailedNonRetryableResponse(jobDescriptor.key,
-        new IllegalStateException(s"Execution process failed. Spark returned non zero status code: $jobReturnCode"), Option(rc))
-      case (Failure(error), _) => FailedNonRetryableResponse(jobDescriptor.key, error, None)
+    jobReturnCode
+  }
+
+  private def resolveExecutionResult(jobReturnCode: Try[Int], failedOnStderr: Boolean): Future[BackendJobExecutionResponse] = {
+    (jobReturnCode, failedOnStderr)  match {
+      case (Success(0), false) if jobPaths.stderr.lines.toList.isEmpty => resolveExecutionProcess
+      case (Success(0), false) => resolveExecutionProcess
+      case (Success(0), true) => Future.successful(FailedNonRetryableResponse(jobDescriptor.key,
+        new IllegalStateException(s"Execution process failed although return code is zero but stderr is not empty"), Option(0)))
+      case (Success(rc), _) => Future.successful(FailedNonRetryableResponse(jobDescriptor.key,
+        new IllegalStateException(s"Execution process failed. Spark returned non zero status code: $rc"), Option(rc)))
+      case (Failure(error), _) => Future.successful(FailedNonRetryableResponse(jobDescriptor.key, error, None))
+      }
+
+  }
+
+  private def resolveExecutionProcess: Future[BackendJobExecutionResponse] = {
+    checkForSparkClusterMode(sparkDeployMode, sparkMaster) match {
+      case true =>
+       clusterExtProcess.startMonitoringSparkClusterJob(jobPaths.callRoot, SubmitJobJson.format(sparkDeployMode)) collect  {
+           case Finished => processSuccess(0)
+           case Failed(error: Throwable) =>  FailedNonRetryableResponse(jobDescriptor.key, error, None)
+        } recover {
+         case error: Throwable => FailedNonRetryableResponse(jobDescriptor.key, error, None)
+       }
+      case false => Future.successful(processSuccess(0))
     }
   }
 
@@ -110,14 +147,16 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
     */
   override def abort(): Unit = Future.failed(new UnsupportedOperationException("SparkBackend currently doesn't support aborting jobs."))
 
-
+  /**
+    *
+    */
   private def createExecutionFolderAndScript(): Unit = {
     try {
       log.debug("{} Creating execution folder: {}", tag, executionDir)
       executionDir.toString.toFile.createIfNotExists(true)
 
       log.debug("{} Resolving job command", tag)
-      val command = localizeInputs(jobPaths.callRoot, docker = false, fileSystems, jobDescriptor.inputs) flatMap {
+      val command= localizeInputs(jobPaths.callRoot, docker = false, fileSystems, jobDescriptor.inputs) flatMap {
         localizedInputs => call.task.instantiateCommand(localizedInputs, callEngineFunction, identity)
       }
 
@@ -125,28 +164,43 @@ class SparkJobExecutionActor(override val jobDescriptor: BackendJobDescriptor,
       //TODO: we should use shapeless Heterogeneous list here not good to have generic map
       val attributes: Map[String, Any] = Map(
         SparkCommands.APP_MAIN_CLASS -> runtimeAttributes.appMainClass,
-        SparkCommands.DEPLOY_MODE -> runtimeAttributes.deployMode,
-        SparkCommands.MASTER -> runtimeAttributes.sparkMaster.get,
+        SparkCommands.MASTER -> sparkMaster,
         SparkCommands.EXECUTOR_CORES -> runtimeAttributes.executorCores,
         SparkCommands.EXECUTOR_MEMORY -> runtimeAttributes.executorMemory.to(MemoryUnit.GB).amount.toLong,
-        SparkCommands.SPARK_APP_WITH_ARGS -> command.get
+        SparkCommands.SPARK_APP_WITH_ARGS -> command.get,
+        SparkCommands.DEPLOY_MODE -> sparkDeployMode
       )
 
-      cmds.writeScript(cmds.sparkSubmitCommand(attributes), scriptPath, executionDir) // Writes the bash script for executing the command
-      scriptPath.addPermission(PosixFilePermission.OWNER_EXECUTE) // Add executable permissions to the script.
+      val sparkSubmitCmd = cmds.sparkSubmitCommand(attributes)
+      val isSparkClusterMode = checkForSparkClusterMode(sparkDeployMode, sparkMaster)
+      val sparkCommand = if(isSparkClusterMode) {
+        sparkSubmitCmd.concat(" %s %s".format(PIPELINE, SubmitJobJson.format(sparkDeployMode)))
+      } else {
+        sparkSubmitCmd
+      }
+
+      cmds.writeScript(sparkCommand, scriptPath, executionDir)
+      scriptPath.addPermission(PosixFilePermission.OWNER_EXECUTE)
+
     } catch {
       case ex: Exception =>
         log.error(ex, "Failed to prepare task: " + ex.getMessage)
-        throw ex
+        executionResponse success FailedNonRetryableResponse(jobDescriptor.key, ex, None)
     }
   }
 
-  private def prepareAndExecute: Unit = {
+  private def checkForSparkClusterMode(deployMode: String, master: String): Boolean = {
+    SparkClusterIdentifier.exists(master.toLowerCase.contains) && deployMode.equals(SparkClusterDeployMode)
+  }
+
+  private def taskLauncher = {
     Try {
-      createExecutionFolderAndScript()
-      executionResponse success executeTask()
+      checkForSparkClusterMode(sparkDeployMode, sparkMaster) match {
+        case true => executionResponse completeWith  executeTask(clusterExtProcess, clusterStdoutWriter, clusterStderrWriter)
+        case _ => executionResponse completeWith  executeTask(extProcess, stdoutWriter, stderrWriter)
+      }
     } recover {
-      case exception => executionResponse success  FailedNonRetryableResponse(jobDescriptor.key, exception, None)
+      case exception => executionResponse success FailedNonRetryableResponse(jobDescriptor.key, exception, None)
     }
   }
 

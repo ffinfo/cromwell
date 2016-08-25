@@ -15,8 +15,7 @@ import scala.util.Try
 
 object SparkInitializationActor {
   val SupportedKeys = Set(FailOnStderrKey, SparkRuntimeAttributes.ExecutorCoresKey, SparkRuntimeAttributes.ExecutorMemoryKey,
-    SparkRuntimeAttributes.NumberOfExecutorsKey, SparkRuntimeAttributes.AppMainClassKey, SparkRuntimeAttributes.SparkDeployMode,
-    SparkRuntimeAttributes.SparkMaster)
+    SparkRuntimeAttributes.NumberOfExecutorsKey, SparkRuntimeAttributes.AppMainClassKey)
 
   def props(workflowDescriptor: BackendWorkflowDescriptor,
             calls: Seq[Call],
@@ -35,9 +34,7 @@ class SparkInitializationActor(override val workflowDescriptor: BackendWorkflowD
     SparkRuntimeAttributes.AppMainClassKey -> wdlTypePredicate(valueRequired = true, WdlBooleanType.isCoerceableFrom),
     SparkRuntimeAttributes.NumberOfExecutorsKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
     SparkRuntimeAttributes.ExecutorMemoryKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
-    SparkRuntimeAttributes.ExecutorCoresKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
-    SparkRuntimeAttributes.SparkDeployMode -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom),
-    SparkRuntimeAttributes.SparkMaster -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom)
+    SparkRuntimeAttributes.ExecutorCoresKey -> wdlTypePredicate(valueRequired = false, WdlBooleanType.isCoerceableFrom)
   )
 
   /**

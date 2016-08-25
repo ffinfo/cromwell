@@ -33,7 +33,7 @@ class SparkRuntimeAttributesSpec extends WordSpecLike with Matchers {
 
   val emptyWorkflowOptions = WorkflowOptions(JsObject(Map.empty[String, JsValue]))
 
-  val staticDefaults = SparkRuntimeAttributes(1, MemorySize.parse("1 GB").get, None, "com.test.spark" , None, Some("local"), false)
+  val staticDefaults = SparkRuntimeAttributes(1, MemorySize.parse("1 GB").get, None, "com.test.spark" , false)
 
   def workflowOptionsWithDefaultRA(defaults: Map[String, JsValue]) = {
     WorkflowOptions(JsObject(Map(
@@ -45,40 +45,6 @@ class SparkRuntimeAttributesSpec extends WordSpecLike with Matchers {
     "return an instance of itself when there are no runtime attributes defined." in {
       val runtimeAttributes = createRuntimeAttributes(HelloWorld, """runtime { %s: "%s" }""").head
       assertSparkRuntimeAttributesSuccessfulCreation(runtimeAttributes, emptyWorkflowOptions, staticDefaults)
-    }
-
-    "return an instance of itself when tries to validate a valid Deploy Mode entry" in {
-      val expectedRuntimeAttributes = staticDefaults.copy(deployMode = Option("cluster"))
-      val runtimeAttributes = createRuntimeAttributes(HelloWorld, """runtime { deployMode: "cluster" %s: "%s" }""").head
-      assertSparkRuntimeAttributesSuccessfulCreation(runtimeAttributes, emptyWorkflowOptions, expectedRuntimeAttributes)
-    }
-
-    "use workflow options as default if deployMode key is missing" in {
-      val runtimeAttributes = createRuntimeAttributes(HelloWorld, """runtime { %s: "%s" }""").head
-      val workflowOptions = workflowOptionsWithDefaultRA(Map(SparkRuntimeAttributes.SparkDeployMode -> JsString("cluster")))
-      assertSparkRuntimeAttributesSuccessfulCreation(runtimeAttributes, workflowOptions, staticDefaults.copy(deployMode = Some("cluster")))
-    }
-
-    "throw an exception when tries to validate an invalid deployMode entry" in {
-      val runtimeAttributes = createRuntimeAttributes(HelloWorld, """runtime { deployMode: 1 %s: "%s" }""").head
-      assertSparkRuntimeAttributesFailedCreation(runtimeAttributes, "Expecting deployMode runtime attribute to be a String")
-    }
-
-    "return an instance of itself when tries to validate a valid Master entry" in {
-      val expectedRuntimeAttributes = staticDefaults.copy(sparkMaster = Option("spark://master"))
-      val runtimeAttributes = createRuntimeAttributes(HelloWorld, """runtime { master: "spark://master" %s: "%s"}""").head
-      assertSparkRuntimeAttributesSuccessfulCreation(runtimeAttributes, emptyWorkflowOptions, expectedRuntimeAttributes)
-    }
-
-    "use workflow options as default if master key is missing" in {
-      val runtimeAttributes = createRuntimeAttributes(HelloWorld, """runtime { %s: "%s" }""").head
-      val workflowOptions = workflowOptionsWithDefaultRA(Map(SparkRuntimeAttributes.SparkMaster -> JsString("spark://master")))
-      assertSparkRuntimeAttributesSuccessfulCreation(runtimeAttributes, workflowOptions, staticDefaults.copy(sparkMaster = Some("spark://master")))
-    }
-
-    "throw an exception when tries to validate an invalid master entry" in {
-      val runtimeAttributes = createRuntimeAttributes(HelloWorld, """runtime { master: 1 %s: "%s" }""").head
-      assertSparkRuntimeAttributesFailedCreation(runtimeAttributes, "Expecting master runtime attribute to be a String")
     }
 
     "return an instance of itself when tries to validate a valid Number of Executors entry" in {

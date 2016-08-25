@@ -1,11 +1,17 @@
 package cromwell.backend.impl.spark
 
-import java.nio.file.{Path}
+import java.nio.file.Path
+
 import com.typesafe.scalalogging.StrictLogging
 import cromwell.core.{TailedWriter, UntailedWriter}
 import cromwell.core.PathFactory.EnhancedPath
+
 import scala.sys.process._
 import better.files._
+import org.json4s.DefaultFormats
+import org.json4s.jackson.JsonMethods._
+
+import scala.io.Source
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -18,12 +24,14 @@ object SparkCommands {
   val MASTER = "master"
   val DEPLOY_MODE = "deploy-mode"
   val SPARK_APP_WITH_ARGS = "spark_app_with_args"
-  val MEMORY_UNIT = "g" //Accepts only GB
+  val MEMORY_UNIT = "G" //Accepts only GB
   val SHELL_CMD = "sh"
+  val PIPELINE = "&>"
 }
 
 class SparkCommands extends StrictLogging {
   import SparkCommands._
+  import SparkClusterConstants._
   /**
     * Writes the script file containing the user's command from the WDL as well
     * as some extra shell code for monitoring jobs
@@ -50,16 +58,17 @@ class SparkCommands extends StrictLogging {
       .map(p => String.format("%s%s", p, s"/bin/$SPARK_SUBMIT"))
       .getOrElse(SPARK_SUBMIT)
 
-    val sb = stringBuilder.append(sparkSubmit).append(commandPlaceHolder.format(SEPARATOR, MASTER, attributes(MASTER)))
-
     attributes.foreach {
       case (key, _) => attributes.get(key) match {
         case Some (v) => commandPlaceHolder.format (SEPARATOR, key, v)
         case None => logger.warn (s" key: $key doesn't exit spark should pick it")
-     }
+      }
     }
 
-    val sparkCmd = sb.append(commandPlaceHolder.format(SEPARATOR, APP_MAIN_CLASS, attributes(APP_MAIN_CLASS)))
+    val sparkCmd = stringBuilder.append(sparkSubmit)
+      .append(commandPlaceHolder.format(SEPARATOR, MASTER, attributes(MASTER)))
+      .append(commandPlaceHolder.format(SEPARATOR, DEPLOY_MODE, attributes(DEPLOY_MODE)))
+      .append(commandPlaceHolder.format(SEPARATOR, APP_MAIN_CLASS, attributes(APP_MAIN_CLASS)))
       .append(commandPlaceHolder.format(SEPARATOR, EXECUTOR_CORES, attributes(EXECUTOR_CORES)))
       .append(commandPlaceHolder.format(SEPARATOR, EXECUTOR_MEMORY, "%s%s".format(attributes(EXECUTOR_MEMORY), MEMORY_UNIT)))
       .append(attributes(SPARK_APP_WITH_ARGS)).toString
@@ -68,7 +77,7 @@ class SparkCommands extends StrictLogging {
   }
 }
 
-class SparkProcess extends StrictLogging {
+trait SparkProcess {
   private val stdout = new StringBuilder
   private val stderr = new StringBuilder
 
