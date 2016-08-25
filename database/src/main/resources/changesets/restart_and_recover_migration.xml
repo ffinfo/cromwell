@@ -66,7 +66,13 @@
                 SELECT 1 FROM EXECUTION e2 WHERE
                 e2.WORKFLOW_EXECUTION_ID = e.WORKFLOW_EXECUTION_ID AND
                 e2.CALL_FQN = e.CALL_FQN AND
-                e2.IDX != -1))
+                e2.IDX != -1)) AND
+              NOT EXISTS (                   -- filter out earlier attempts
+                SELECT 1 FROM EXECUTION e3 WHERE
+                e3.WORKFLOW_EXECUTION_ID = e.WORKFLOW_EXECUTION_ID AND
+                e3.CALL_FQN = e.CALL_FQN AND
+                e3.IDX = e.IDX AND
+                e3.ATTEMPT > e.ATTEMPT)
         </sql>
     </changeSet>
 
