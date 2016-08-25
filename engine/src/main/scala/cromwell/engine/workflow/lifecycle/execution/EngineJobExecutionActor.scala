@@ -4,26 +4,23 @@ import akka.actor.{ActorRef, LoggingFSM, Props}
 import cromwell.backend.BackendJobCachingActor.CacheJobCommand
 import cromwell.backend.BackendJobExecutionActor._
 import cromwell.backend.{BackendInitializationData, BackendJobDescriptor, BackendJobDescriptorKey, BackendLifecycleActorFactory}
-import cromwell.core.logging.WorkflowLogging
 import cromwell.core.Dispatcher.EngineDispatcher
+import cromwell.core.ExecutionIndex.IndexEnhancedIndex
 import cromwell.core._
 import cromwell.core.callcaching._
+import cromwell.core.logging.WorkflowLogging
 import cromwell.database.CromwellDatabase
 import cromwell.database.sql.MetaInfoId
 import cromwell.engine.workflow.lifecycle.execution.EngineJobExecutionActor._
 import cromwell.engine.workflow.lifecycle.execution.JobPreparationActor.{BackendJobPreparationFailed, BackendJobPreparationSucceeded}
 import cromwell.engine.workflow.lifecycle.execution.callcaching.EngineJobHashingActor.{CacheHit, CacheMiss, CallCacheHashes, HashError}
 import cromwell.engine.workflow.lifecycle.execution.callcaching.FetchCachedResultsActor.{CachedOutputLookupFailed, CachedOutputLookupSucceeded}
-import cromwell.engine.workflow.lifecycle.execution.callcaching.EngineJobHashingActor.{CacheHit, CacheMiss, CallCacheHashes}
 import cromwell.engine.workflow.lifecycle.execution.callcaching._
 import cromwell.jobstore.JobStoreActor._
 import cromwell.jobstore.{Pending => _, _}
 import wdl4s.TaskOutput
-import cromwell.core.ExecutionIndex.IndexEnhancedIndex
 
 import scala.util.{Failure, Success, Try}
-
-import scala.util.Try
 
 class EngineJobExecutionActor(jobKey: BackendJobDescriptorKey,
                               executionData: WorkflowExecutionActorData,
@@ -118,20 +115,20 @@ class EngineJobExecutionActor(jobKey: BackendJobDescriptorKey,
       writeToMetadata(Map(callCachingReadResultMetadataKey -> "Cache Miss"))
       log.info(s"Cache miss for job ${jobDescriptor.key.call.fullyQualifiedName}, index ${jobDescriptor.key.index}")
       runJob(jobDescriptor, bjeaProps)
-    case Event(CacheHit(cacheResultId), JobDescriptorData(jobDescriptor, _)) =>
+    case Event(CacheHit(cacheResultId), JobDescriptorData(jobDescriptor, bjeaProps)) =>
       writeToMetadata(Map(callCachingReadResultMetadataKey -> s"Cache Hit (from result ID $cacheResultId)"))
       log.info(s"Cache hit for job ${jobDescriptor.key.call.fullyQualifiedName}, index ${jobDescriptor.key.index}! Copying cache result $cacheResultId")
-      lookupCachedResult(jobDescriptor, jobKey.call.task.outputs, cacheResultId)
+      lookupCachedResult(jobDescriptor, bjeaProps, jobKey.call.task.outputs, cacheResultId)
   }
 
   // When PreparingCachedOutputs, the FSM should have EJEAJobDescriptorData
   // because it would potentially need it for the BackendJobCachingActor
   when(PreparingCachedOutputs) {
-    case Event(CachedOutputLookupSucceeded(cachedJobOutputs),EJEAJobDescriptorData(Some(jobDescriptor), Some(bjeaProps))) =>
+    case Event(CachedOutputLookupSucceeded(cachedJobOutputs),JobDescriptorData(jobDescriptor, bjeaProps)) =>
       //I can remove some of this logging once this PR is reviewed--mostly for my own debugging
        log.info(s"Created a copy of the cached job outputs for ${jobDescriptor.key.call.fullyQualifiedName}, index ${jobDescriptor.key.index}.")
          cacheJob(jobDescriptor, cachedJobOutputs, bjeaProps)
-    case Event(CachedOutputLookupFailed(metaInfoId, error), EJEAJobDescriptorData(Some(jobDescriptor), Some(bjeaProps))) => //print the error and then run job?
+    case Event(CachedOutputLookupFailed(metaInfoId, error), JobDescriptorData(jobDescriptor, bjeaProps)) => //print the error and then run job?
          log.info(s"Can't make a copy of the cached job outputs for ${jobDescriptor.key.call.fullyQualifiedName}, index ${jobDescriptor.key.index} due to ${error}. Running job.")
         runJob(jobDescriptor, bjeaProps)
   }
@@ -210,22 +207,22 @@ class EngineJobExecutionActor(jobKey: BackendJobDescriptorKey,
     context.actorOf(EngineJobHashingActor.props(jobDescriptor, initializationData, factory.fileContentsHasherActor, dockerHashLookupActor, factory.runtimeAttributeDefinitions, backendName, activity), s"ejha_for_$jobDescriptor")
   }
 
-  def lookupCachedResult(jobDescriptor: BackendJobDescriptor, taskOutputs: Seq[TaskOutput], cacheResultId: MetaInfoId) = {
+  def lookupCachedResult(jobDescriptor: BackendJobDescriptor, bjeaProps: Props, taskOutputs: Seq[TaskOutput], cacheResultId: MetaInfoId) = {
     // TODO: Start up a backend job copying actor (if possible, otherwise just runJob). That should send back the BackendJobExecutionResponse
     //self ! FailedNonRetryableResponse(jobKey, new Exception("Call cache result copying not implemented!"), None)
-    val cachingSimpletonActor = context.actorOf(FetchCachedResultsActor.props(cacheResultId, taskOutputs))
+    val fetchCachedResultsActor = context.actorOf(FetchCachedResultsActor.props(cacheResultId, taskOutputs))
     // While the cache result is looked up, we wait for the response just like we were waiting for a Job to complete:
-    goto(PreparingCachedOutputs) using EJEAJobDescriptorData(Option(jobDescriptor), _)
+    goto(PreparingCachedOutputs) using JobDescriptorData(jobDescriptor, bjeaProps)
   }
 
   def cacheJob(jobDescriptor: BackendJobDescriptor, cachedJobOutputs: JobOutputs, bjeaProps: Props) = {
-    Try()
     val bjcaProps = bjeaProps
     val backendJobCachingActor = context.actorOf(bjcaProps, buildJobCachingActorName(jobDescriptor))
     backendJobCachingActor ! CacheJobCommand(cachedJobOutputs)
     context.parent ! JobRunning(jobDescriptor, backendJobCachingActor) //send the same message as runJob to WorkflowExecutionActor
                                                                        //Workflow shouldn't care if it's execute, cache, or recover, this kind
                                                                        //swithcing/retrying occurs at the EJEA level?
+    goto(RunningJob) using PartialCompletionDataWithJobResults(cachedJobOutputs)
   }
 
   def runJob(jobDescriptor: BackendJobDescriptor, bjeaProps: Props) = {
@@ -240,12 +237,11 @@ class EngineJobExecutionActor(jobKey: BackendJobDescriptorKey,
     s"$workflowId-BackendJobExecutionActor-${jobDescriptor.key.tag}"
   }
 
-  private def saveCacheResults(completionData: CacheWriteOnCompletionData) = {
   private def buildJobCachingActorName(jobDescriptor: BackendJobDescriptor) = {
     s"$workflowId-BackendJobCachingActor-${jobDescriptor.key.tag}"
   }
 
-  private def saveCacheResults(completionData: EJEASuccessfulCompletionDataWithHashes) = {
+  private def saveCacheResults(completionData: CacheWriteOnCompletionData) = {
     val callCache = new CallCache(CromwellDatabase.databaseInterface)
     context.actorOf(CallCacheWriteActor.props(callCache, workflowId, completionData.hashes, completionData.jobResult), s"CallCacheWriteActor-$tag")
     goto(UpdatingCallCache) using completionData
@@ -328,6 +324,7 @@ private[execution] case class JobDescriptorData(jobDescriptor: BackendJobDescrip
 private[execution] case object EmptyPartialCompletionData extends EJEAData
 private[execution] case class PartialCompletionDataWithSucceededResponse(response: SucceededResponse) extends EJEAData
 private[execution] case class PartialCompletionDataWithHashes(hashes: Try[CallCacheHashes]) extends EJEAData
+private[execution] case class PartialCompletionDataWithJobResults(cachedJobOutputs: JobOutputs) extends EJEAData
 
 private[execution] case class CacheWriteOffCompletionData(jobResult: BackendJobExecutionResponse) extends EJEAData
 private[execution] case class CacheWriteOnCompletionData(jobResult: SucceededResponse, hashes: CallCacheHashes) extends EJEAData
