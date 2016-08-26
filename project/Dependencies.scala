@@ -88,7 +88,7 @@ object Dependencies {
     "org.mongodb" %% "casbah" % "3.0.0"
   )
 
-  val sparkBackendDependencies = List("org.json4s" %% "json4s-jackson" % "3.4.0")
+  val sparkBackendDependencies = List("io.spray" %% "spray-json" % DowngradedSprayV)
 
   val engineDependencies = List(
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",

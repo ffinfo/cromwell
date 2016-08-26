@@ -8,10 +8,6 @@ import cromwell.core.PathFactory.EnhancedPath
 
 import scala.sys.process._
 import better.files._
-import org.json4s.DefaultFormats
-import org.json4s.jackson.JsonMethods._
-
-import scala.io.Source
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 

@@ -5,12 +5,10 @@ import java.nio.file.Path
 import akka.actor.ActorSystem
 import cromwell.backend.impl.spark.SparkClusterProcess.{ParserResponse, TerminalStatus}
 import spray.http.{HttpRequest, HttpResponse, StatusCodes}
-import spray.json.DefaultJsonProtocol
+import spray.json.{DefaultJsonProtocol, JsonParser}
 import spray.client.pipelining._
 
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import org.json4s._
-import org.json4s.jackson.JsonMethods._
 import better.files._
 import com.typesafe.scalalogging.Logger
 import org.slf4j.LoggerFactory
@@ -23,7 +21,7 @@ object SparkClusterProcess {
   case class SuccessResponse(action: String, driverState: String, serverSparkVersion: String,
                              submissionId: String, success: Boolean, workerHostPort: String, workerId: String) extends SparkClusterResponse
   sealed trait ParserResponse
-  case class SuccessfulParsedResponse(id: String, status: Boolean) extends ParserResponse
+  case class SuccessfulParsedResponse(action: String, message: String, serverSparkVersion: String, submissionId: String, success: Boolean) extends ParserResponse
 
   sealed trait TerminalStatus
   case class Failed(error: Throwable) extends TerminalStatus
@@ -31,7 +29,7 @@ object SparkClusterProcess {
 
   object SparkClusterJsonProtocol extends DefaultJsonProtocol {
     implicit val sparkStatusResponseFormat = jsonFormat7(SuccessResponse)
-    implicit val formats = DefaultFormats
+    implicit val successfulParsedResponseFormat = jsonFormat5(SuccessfulParsedResponse)
   }
 }
 
@@ -99,7 +97,7 @@ class SparkClusterProcess(implicit system: ActorSystem) extends SparkProcess
     Future(parseJsonForSubmissionIdAndStatus(jobPath.resolve(jsonFile))) onComplete  {
       case Success(resp: SuccessfulParsedResponse) =>
         val rcPath = jobPath.resolve(ReturnCodeFile)
-        monitorSparkClusterJob(resp.id, rcPath, monitorPromise)
+        monitorSparkClusterJob(resp.submissionId, rcPath, monitorPromise)
         evaluateMonitoringFuture(rcPath)
       case Failure(exception: Throwable) =>
         logger.error(s"{} Spark Job failed to submit successfully following reason: {}", tag, exception.getMessage)
@@ -165,8 +163,7 @@ class SparkClusterProcess(implicit system: ActorSystem) extends SparkProcess
         logger.error("{} reason: {}", tag, msg)
         throw new IllegalStateException(msg)
     }
-    val json = parse(line)
-    SuccessfulParsedResponse((json \ submissionIdInJson).extract[String], (json \ successInJson).extract[Boolean])
+    JsonParser(line).convertTo[SuccessfulParsedResponse]
   }
 
   override def makeHttpRequest(httpRequest: HttpRequest): Future[HttpResponse] = {
